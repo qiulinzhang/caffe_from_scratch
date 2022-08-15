@@ -90,7 +90,8 @@ namespace caffe{
     // CUDA: number of blocks for threads
     inline int CAFFE_GET_BLOCKS(const int N){
         return (N+CAFFE_CUDA_NUM_THREADS-1)/CAFFE_CUDA_NUM_THREADS;
-    }
+    } // 内联函数，每次调用都会进行拷贝；普通函数则是压入堆栈，只有一份拷贝
+      // 内联函数的优点的速度快，无需堆栈压进弹出；但是由于多份拷贝，需要占用多份内存
 } // namespace caffe
 
 #endif // CPU_ONLY
