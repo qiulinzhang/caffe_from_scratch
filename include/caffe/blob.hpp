@@ -72,6 +72,36 @@ class Blob{
 
     inline int num_axes() const{return shape_.size();} // vector的大小，>= capacity
     inline int count() const {return count_};
+
+    /**
+     * @brief Compute the volume of a slice; i.e., the product of dimensions
+     *        among a range of axes.
+     *
+     * @param start_axis The first axis to include in the slice.
+     *
+     * @param end_axis The first axis to exclude from the slice.
+     */
+     inline int count const(int start_axis, int end_axis) const{
+        CHECK_LE(start_axis, end_axis);
+        CHECK_GE(start_axis, 0);
+        CHECK_GE(end_axis, 0);
+        CHECK_LE(start_axis, num_axes());
+        CHECK_LE(end_axis, num_axes());
+        int count = 1;
+        for (int i=start_axis; i < end_axis; ++i){
+            count *= shape(i);
+        }
+        return count;
+     }
+    /**
+     * @brief Compute the volume of a slice spanning from a particular first
+     *        axis to the final axis.
+     *
+     * @param start_axis The first axis to include in the slice.
+     */
+     inline int count(int start_axis) const{
+        return count(start_axis, num_axes());
+     }
     /**
      * @brief Returns the 'canonical' version of a (usually) user-specified axis,
      *        allowing for negative indexing (e.g., -1 for the last axis).
@@ -97,6 +127,96 @@ class Blob{
         }
         return axis_index;
     }
-     
+    /// @brief Deprecated legacy shape accessor num: use shape(0) instead.
+    inline int num() const { return LegacyShape(0); }
+    /// @brief Deprecated legacy shape accessor channels: use shape(1) instead.
+    inline int channels() const { return LegacyShape(1); }
+    /// @brief Deprecated legacy shape accessor height: use shape(2) instead.
+    inline int height() const { return LegacyShape(2); }
+    /// @brief Deprecated legacy shape accessor width: use shape(3) instead.
+    inline int width() const { return LegacyShape(3); }
+    inline int LegacyShape(int index) const{
+        CHECK_LE(num_axes(), 4) << "Cannot use legacy accessors on Blobs with >4 axes.";
+        CHECK_LT(index, 4);
+        CHECK_GE(index, -4);
+
+        if(index>=num_axes() || index < -num_axes()){
+            // Axis is out of range, but still in [0, 3] (or [-4, -1] for reverse
+            // indexing) -- this special case simulates the one-padding used to fill
+            // extraneous axes of legacy blobs.            
+            return 1;
+        }
+        return shape(index);
+    }
+
+    inline int offset(const int n, const int c=0, const int h=0,
+                      const int w = 0) const{
+                        CHECK_GE(n, 0);
+                        CHECK_LE(n, num());
+                        CHECK_GE(channels(), 0); // problem, should be CHECK_GE(c, 0);
+                        CHECK_LE(c, channels());
+                        CHECK_GE(height(), 0);// problem, should be CHECK_GE(h, 0);
+                        CHECK_LE(h, height());
+                        CHECK_GE(width(), 0);// problem, should be CHECK_GE(w, 0);
+                        CHECK_LE(w, width());
+                        return ((n*channels()+c)*height()+h)*width()+w;
+                      }
+    inline int offset(const vector<int>& indices) const{
+        CHECK_LE(indices.size(), num_axes()); // problem, should check equal
+        int offset=0;
+        for (int i=0; i<num_axes(); ++i){
+            offset *= shape(i);
+            if (indices.size()>i){
+                CHECK_GE(indices[i], 0);
+                CHECK_LT(indices[i], shape(i));
+                offset += indices[i];
+            }
+        }
+        return offset;
+    }
+    /**
+     * @brief Copy from a source Blob.
+     *
+     * @param source the Blob to copy from
+     * @param copy_diff if false, copy the data; if true, copy the diff
+     * @param reshape if false, require this Blob to be pre-shaped to the shape
+     *        of other (and die otherwise); if true, Reshape this Blob to other's
+     *        shape if necessary
+     */
+     void CopyFrom(const Blob<Dtype>& source, bool copy_diff = false, 
+                   bool reshape = false);
+    
+     inline Dtype data_at(const int n, const int c, const int h, const int w) cosnt{
+        return cpu_data()[offset(n, c, h, w)];
+     }
+     inlint Dtype diff_at(const int n, const int c, const int h, const int w)const{
+        return cpu_diff()[offset(n, c, h, w)];
+     }
+     inline Dtype data_at(const vector<int>& index)const{
+        return cpu_data()[offset(index)];
+     }
+     inline Dtype diff_at(const vector<int>& index) const{
+        return cpu_diff()[offset(index)];
+     }
+
+     inline const share_ptr<SyncedMemory>& data() const{
+        CHECK(data_);
+        return data_;
+     }
+
+     inline const shared_ptr<SyncedMemory>& diff() const{
+        CHECK(diff_);
+        return diff_;
+     }
+
+     const Dtype* cpu_data() const;
+     void set_cpu_data(Dtype* data);
+     const int* gpu_shape() const;
+     const Dtype* gpu_data() const;
+     void set_gpu_data(Dtype* data);
+     const Dtype* cpu_diff() const;
+     const Dtype* gpu_diff() const;
+
+     Dtype* mutable_cpu_data();
 }
 }
