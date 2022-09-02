@@ -199,7 +199,7 @@ class Blob{
         return cpu_diff()[offset(index)];
      }
 
-     inline const share_ptr<SyncedMemory>& data() const{
+     inline const shared_ptr<SyncedMemory>& data() const{
         CHECK(data_);
         return data_;
      }
@@ -218,5 +218,56 @@ class Blob{
      const Dtype* gpu_diff() const;
 
      Dtype* mutable_cpu_data();
-}
-}
+     Dtype* mutable_gpu_data();
+     Dtype* mutable_cpu_diff();
+     Dtype* mutable_gpu_diff();
+     void Updata();
+     void FromProto(const BlobProto& proto, bool reshape=true);
+     void ToProto(BlobProto* proto, bool write_diff = false) const;
+
+     /// @brief Compute the sum of absolute values (L1 norm) of the data
+     Dtype asum_data() const;
+     /// @brief Compute the sum of absolute values (L1 norm) of the diff
+     Dtype asum_diff() const;
+     /// @brief Compute the sum of squares (L2 norm) of the data
+     Dtype sumsq_data() const;
+     /// @brief Compute the sum of squares (L2 norm) of the data
+     Dtype sumsq_diff() const;
+
+     /// @brief Scale the blob data by a constant factor
+     void scale_data(Dtype scale_factor);
+     /// @brief Scale the blob diff by a constant factor
+     void scale_diff(Dtype scale_factor);
+     
+    /**
+     * @brief Set the data_ shared_ptr to point to the SyncedMemory Holding the data_ of Blob other
+     *        usedful in Layer%s which simply perform a copy in their Forward pass.
+     *
+     * This deallocates the SyncedMemory holding this Blob's data_, 
+     * as shared_ptr calls its detructor when reset with the "=" operator
+     */
+     void ShareData(const Blob& other)
+    
+    /**
+     * @brief Set the data_ shared_ptr to point to the SyncedMemory Holding the data_ of Blob other
+     *        usedful in Layer%s which simply perform a copy in their Forward pass.
+     *
+     * This deallocates the SyncedMemory holding this Blob's diff_, 
+     * as shared_ptr calls its detructor when reset with the "=" operator
+     */
+     void ShareDiff(const Blob& other);
+
+     bool ShapeEquals(const BlobProto& other);
+
+     protected:
+        shared_ptr<SyncedMemory> data_;
+        shared_ptr<SyncedMemory> diff_;
+        shared_ptr<SyncedMemory> shape_data_;
+        vector<int> shape_;
+        int count_;
+        int capacity_;
+
+    DISABLE_COPY_AND_ASSIGN(Blob);
+    }; // class Blob
+} // namespace caffe
+#endif //Caffe_BLOB_HPP
