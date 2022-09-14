@@ -89,6 +89,7 @@ namespace caffe {
 
     template <typename Dtype>
     void Blob<Dtype>::set_cpu_data(Dtype* data) {
+        // 把指针data赋值给Blob.cpu_ptr_
         CHECK(data);
         // Make sure CPU and GPU sizes remains equal
         size_t size = count_ * sizeof(Dtype);
@@ -108,6 +109,7 @@ namespace caffe {
 
     template <typename Dtype>
     void Blob<Dtype>::set_gpu_data(Dtype* data) {
+        // 把指针data赋值给Blob.gpu_ptr_
         CHECK(data);
         // Make sure CPU and GPU sizes remains equal
         size_t size = count_ * sizeof(Dtype); // problem，为什么要比较这两个size
@@ -116,4 +118,64 @@ namespace caffe {
             diff_.reset(new SyncedMemory(size));
         }
         data_->set_gpu_data(data);
+    }
+
+    template <typename Dtype>
+    const Dtype* Blob<Dtype>::cpu_diff() const {
+        CHECK(diff_);
+        return (const Dtype*)diff_->cpu_data();
+    }
+
+    template <typename Dtype>
+    const Dtype* Blob<Dtype>::gpu_diff() const {
+        CHECK(diff_);
+        return (const Dtype*)diff_->gpu_data();
+    }
+
+    template <typename Dtype>
+    Dtype* Blob<Dtype>::mutable_cpu_data() {
+        CHECK(data_);
+        return static_cast<Dtype*> (data_->mutable_cpu_data());
+    }
+
+    template <typename Dtype>
+    Dtype* Blob<Dtype>::mutable_gpu_data() {
+        CHECK(data_);
+        return static_cast<Dtype*>(data_->mutable_gpu_data());
+    }
+
+    template <typename Dtype>
+    Dtype* Blob<Dtype>::mutable_cpu_diff() {
+      CHECK(diff_);
+      return static_cast<Dtype*>(diff_->mutable_cpu_data());
+    }
+
+    template <typename Dtype>
+    Dtype* Blob<Dtype>::mutable_gpu_diff() {
+      CHECK(diff_);
+      return static_cast<Dtype*>(diff_->mutable_gpu_data());
+    }
+
+    template <typename Dtype>
+    void Blob<Dtype>::ShareData(const Blob& other) {
+        CHECK_EQ(count_, other.count());
+        data_ = other.data();
+    }
+
+    template <typename Dtype>
+    void Blob<Dtype>::ShareDiff(const Blob& other) {
+        CHECK_EQ(count_, other.count_());
+        diff_ = other.diff();
+    }
+    // The "update" method is used for parameter blobs in a Net, which are stored
+    // as Blob<float> or Blob<double> -- hence we do not define it for
+    // Blob<int> or Blob<unsigned int>.
+    template <>
+    void Blob<unsigned int>::Update() {
+        NOT_IMPLEMENTED;
+    }
+
+    template <>
+    void Blob<int>::Update() {
+        NOT_IMPLEMENTED;
     }

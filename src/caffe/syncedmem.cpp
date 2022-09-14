@@ -79,7 +79,7 @@ namespace caffe{
             NO_GPU;
         #endif
     }
-
+    // problem，与 mutable_cpu_data的区别，(const void*)的作用是啥？
     const void* SyncedMemory::cpu_data(){
         check_device();
         to_cpu();
