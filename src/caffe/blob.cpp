@@ -25,6 +25,7 @@ namespace caffe {
         if (!shape_data_ || shape_data_->size() < shape.size()*sizeof(int)) {
             shape_data_.reset(new SyncedMemory(shape.size() * sizeof(int)));
         }
+        // static_cast 在编译时就进行类型安全检查
         int* shape_data = static_cast<int*>(shape_data_->mutable_cpu_data());
         for (int i=0; i<shape.size(); ++i){
             CHECK_GE(shape[i], 0);

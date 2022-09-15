@@ -80,7 +80,10 @@ namespace caffe{
         #endif
     }
     // problem，与 mutable_cpu_data的区别，(const void*)的作用是啥？
+    // void* 是指返回一个指针，但是指针的类型不受限制，可以直接返回 int or float 型的指针 
+    // const 表示其值不发生变化
     const void* SyncedMemory::cpu_data(){
+        // 返回值被const修饰，表示返回值不可被改变
         check_device();
         to_cpu();
         return (const void*) cpu_ptr_;
@@ -124,6 +127,7 @@ namespace caffe{
     }
 
     void* SyncedMemory::mutable_cpu_data(){
+        // 返回值没有被const修饰，表示返回值可被改变，对应于 mutable(易变化的，多变的)
         check_device();
         to_cpu();
         head_ = HEAD_AT_CPU;
