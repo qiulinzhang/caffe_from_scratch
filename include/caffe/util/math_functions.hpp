@@ -11,6 +11,31 @@
 
 namespace caffe {
 
+    // Caffe gemm provides a simpler interface to the gemm functions, with the
+    // limitation that the data has to be contiguous in memory.
+    
+    // C := alpha*op(A)*op(B) + beta*C
+    template<typename Dtype>
+    void caffe_cpu_gemm(const CBLAS_TRNANSPOSE TransA, Const CBLAS_TRNANSPOSE TransB,
+                        const int M, const int N, const int K,
+                        const Dtype alpha, const Dtype* A, const Dtype* B, const Dtype beta,
+                        Dtype* C);
+    
+    // y:=alpha*op(A)*x + beta*y
+    template <typename Dtype>
+    void caffe_cpu_gemv(const CBLAS_TRNANSPOSE TransA, const int M, const int N,
+                        const Dtype alpha, const Dtype* A, const Dtype* x, const Dtype beta,
+                        Dtype* y);
+
+    template <typename Dtype>
+    void caffe_set(const int N, const Dtype alpha, Dtype* X);
+
+    template <typename Dtype>
+    void caffe_copy(const int N, const Dtype* X, Dtype* Y);
+
+    template <typename Dtype>
+    void caffe_add_scalar(const int N, const Dtype alpha, Dtype* X);
+
     template <typename Dtype>
     void caffe_scal(const int N, const Dtype* a, Dtype* X);
 
@@ -37,10 +62,10 @@ namespace caffe {
 
     template <typename Dtype>
     void caffe_exp(const int n, const Dtype* a, Dtype* y);
-    
+
     template <typename Dtype>
     void caffe_log(const int n, const Dtype* a, Dtype* y);
-    
+
     template <typename Dtype>
     void caffe_abs(const int n, const Dtype* a, Dtype* y);
 
