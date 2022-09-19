@@ -357,13 +357,13 @@ namespace caffe {
       return boost::math::nextafter<Dtype>(
           b, std::numeric_limits<Dtype>::max());
     }
-    
+
     template
     float caffe_nextafter(const float b);
-    
+
     template
     double caffe_nextafter(const double b);
-    
+
     template <typename Dtype>
     void caffe_rng_uniform(const int n, const Dtype a, const Dtype b, Dtype* r) {
       CHECK_GE(n, 0);
@@ -376,15 +376,15 @@ namespace caffe {
         r[i] = variate_generator();
       }
     }
-    
+
     template
     void caffe_rng_uniform<float>(const int n, const float a, const float b,
                                   float* r);
-    
+
     template
     void caffe_rng_uniform<double>(const int n, const double a, const double b,
                                    double* r);
-    
+
     template <typename Dtype>
     void caffe_rng_gaussian(const int n, const Dtype a,
                             const Dtype sigma, Dtype* r) {
@@ -398,15 +398,15 @@ namespace caffe {
         r[i] = variate_generator();
       }
     }
-    
+
     template
     void caffe_rng_gaussian<float>(const int n, const float mu,
                                    const float sigma, float* r);
-    
+
     template
     void caffe_rng_gaussian<double>(const int n, const double mu,
                                     const double sigma, double* r);
-    
+
     template <typename Dtype>
     void caffe_rng_bernoulli(const int n, const Dtype p, int* r) {
       CHECK_GE(n, 0);
@@ -420,13 +420,13 @@ namespace caffe {
         r[i] = variate_generator();
       }
     }
-    
+
     template
     void caffe_rng_bernoulli<double>(const int n, const double p, int* r);
-    
+
     template
     void caffe_rng_bernoulli<float>(const int n, const float p, int* r);
-    
+
     template <typename Dtype>
     void caffe_rng_bernoulli(const int n, const Dtype p, unsigned int* r) {
       CHECK_GE(n, 0);
@@ -440,10 +440,10 @@ namespace caffe {
         r[i] = static_cast<unsigned int>(variate_generator());
       }
     }
-    
+
     template
     void caffe_rng_bernoulli<double>(const int n, const double p, unsigned int* r);
-    
+
     template
     void caffe_rng_bernoulli<float>(const int n, const float p, unsigned int* r);
 
