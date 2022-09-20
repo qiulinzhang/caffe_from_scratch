@@ -145,4 +145,17 @@ namespace caffe {
     template <typename Dtype>
     void caffe_rng_bernoulli(const int n, const Dtype p, unsigned int* r);
 
+    template <typename Dtype>
+    void caffe_cpu_scale(const int n, const Dtype alpha, const Dtype *x, Dtype* y);
+
+    #ifndef CPU_ONLY // GPU
+
+    // Decaf gpu gemm provides an interface that is almost the same as the cpu
+    // gemm function - following the c convention and calling the fortran-order
+    // gpu code under the hood.
+    template <typename Dtype>
+    void caffe_gpu_gemm(const CBLAS_TRNANSPOSE TransA, const CBLAS_TRNANSPOSE TransB,
+                        const int M, const int N, cosnt int K, 
+                        const Dtype alpha, const Dtype*A, const Dtype* B,
+                        const Dtype beta, Dtype* C);
 }
