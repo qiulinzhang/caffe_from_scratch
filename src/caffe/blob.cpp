@@ -417,6 +417,8 @@ namespace caffe {
 
     template <typename Dtype>
     bool Blob<Dtype>::ShapeEquals(const BlobProto& other) {
+      // BlobProto 定义在 caffe.pb.h，由 ./src/proto/caffe.proto 通过 protoc 解码生成
+      // 可以通过看 caffe.proto 里面的key_val 内容看
       if (other.has_num() || other.has_channels() ||
           other.has_height() || other.has_width()) {
         // Using deprecated 4D Blob dimensions --
