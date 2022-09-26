@@ -474,3 +474,57 @@ namespace caffe {
       }
     }
 
+    template <typename Dtype>
+    void Blob<Dtype>::FromProto(const BlobProto& proto, bool reshape) {
+      // 将proto中的数据拷贝出来，依次判断double和float中是否有数据
+      if (reshape) {
+        vector<int> shape;
+        if (proto.has_num() || proto.has_channels() || proto.has_height() || proto.has_width()) {
+          shape.resize(4);
+          shape[0] = proto.num();
+          shape[1] = proto.channels();
+          shape[2] = proto.height();
+          shape[3] = proto.width();
+        }
+        else {
+          shape.resize(proto.shape().dim_size());
+          for (int i=0; i<proto.shape().dim_size(); ++i) {
+            shape[i] = proto.shape().dim(i);
+          }
+        }
+        Reshape(shape);
+      }
+      else {
+        CHECK(ShapeEquals(proto)) << "shape mismatch (reshape not set)";
+      }
+      // copy data
+      Dtype* data_vec = mutable_cpu_data();
+      if (proto.double_data_size() > 0) {
+        CHECK_EQ(count_, proto.double_data_size());
+        for (int i=0; i<count_; ++i) {
+          data_vec[i] = proto.double_data(i);
+        }
+      }
+      else {
+        CHECK_EQ(count_, proto.data_size());
+        for (int i=0; i<count_; ++i) {
+          data_vec[i] = proto.data(i);
+        }
+      }
+
+      if (proto.double_diff_size() > 0) {
+        CHECK_EQ(count_, proto.double_diff_size());
+        Dtype* diff_vec = mutable_cpu_diff();
+        for (int i = 0; i<count_; ++i) {
+          diff_vec[i] = proto.double_diff();
+        }
+      }
+      else if (proto.diff_size() > 0) {
+        CHECK_EQ(count_, proto.diff_size());
+        Dtype* diff_vec = mutable_cpu_diff();
+        for(int i=0; i<count_; ++i) {
+          diff_vec[i] = proto.diff(i);
+        }
+      }
+    }
+
