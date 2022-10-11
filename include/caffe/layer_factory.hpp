@@ -36,12 +36,12 @@
  * Note that each layer type should only be registered once.
  */
 
- #ifndef CAFFE_LAYER_FACTORY_H_
- #define CAFFE_LAYER_FACTORY_H_
+#ifndef CAFFE_LAYER_FACTORY_H_
+#define CAFFE_LAYER_FACTORY_H_
 
- #include<map>
- #include<string>
- #include<vector>
+#include<map>
+#include<string>
+#include<vector>
 
  #include "caffe/common.hpp"
  #include "caffe/layer.hpp"
