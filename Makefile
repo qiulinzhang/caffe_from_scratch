@@ -429,8 +429,295 @@ CXXFLAGS += -MMD -MP
 # Complete build flags.
 # -I 优先在指定的include目录下寻找
 COMMON_FLAGS += $(foreach includedir,$(INCLUDE_DIRS),-I$(includedir))
+# fPIC 表示编译为位置独立的代码，用于编译共享库。目标文件需要创建成位置无关码， 
+# 就是在可执行程序装载它们的时候，它们可以放在可执行程序的内存里的任何地方
 CXXFLAGS += -pthread -fPIC $(COMMON_FLAGS) $(WARNINGS)
 NVCCFLAGS += -ccbin=$(CXX) -Xcompiler -fPIC $(COMMON_FLAGS)
 # mex may invoke an older gcc that is too liberal with -Wuninitalized
 MATLAB_CXXFLAGS := $(CXXFLAGS) -Wno-uninitialized
 LINKFLAGS += -pthread -fPIC $(COMMON_FLAGS) $(WARNINGS)
+
+USE_PKG_CONFIG ?= 0
+ifeq ($(USE_PKG_CONFIG), 1)
+	PKG_CONFIG := $(shell pkg-config opencv --libs)
+else
+	PKG_CONFIG :=
+endif
+LDFLAGS += $(foreach librarydir,$(LIBRARY_DIRS),-L$(librarydir)) $(PKG_CONFIG) \
+		$(foreach library,$(LIBRARIES),-l$(library))
+PYTHON_LDFLAGS := $(LDFLAGS) $(foreach library,$(PYTHON_LIBRARIES),-l$(library))
+
+# 'superclean' target recursively* deletes all files ending with an extension
+# in $(SUPERCLEAN_EXTS) below.  This may be useful if you've built older
+# versions of Caffe that do not place all generated files in a location known
+# to the 'clean' target.
+#
+# 'supercleanlist' will list the files to be deleted by make superclean.
+#
+# * Recursive with the exception that symbolic links are never followed, per the
+# default behavior of 'find'.
+SUPERCLEAN_EXTS := .so .a .o .bin .testbin .pb.cc .pb.h _pb2.py .cuo
+
+# Set the sub-targets of the 'everything' target.
+EVERYTHING_TARGETS := all py$(PROJECT) test warn lint
+# Only build matcaffe as part of "everything" if MATLAB_DIR is specified.
+ifneq ($(MATLAB_DIR),)
+	EVERYTHING_TARGETS += mat$(PROJECT)
+endif
+
+##############################
+# Define build targets
+##############################
+.PHONY: all lib test clean docs linecount lint lintclean tools examples $(DIST_ALIASES) \
+	py mat py$(PROJECT) mat$(PROJECT) proto runtest \
+	superclean supercleanlist supercleanfiles warn everything
+
+all: lib tools examples
+
+lib: $(STATIC_NAME) $(DYNAMIC_NAME)
+
+everything: $(EVERYTHING_TARGETS)
+
+linecount:
+	cloc --read-lang-def=$(PROJECT).cloc \
+		src/$(PROJECT) include/$(PROJECT) tools examples \
+		python matlab
+
+lint: $(EMPTY_LINT_REPORT)
+
+# $(RM) make 规定的命令 等同于 rm -rf, 使用 `make -p |grep RM' 可以看到 `RM = rm -rf`
+lintclean: 
+	@ $(RM) -r $(LINT_OUTPUT_DIR) $(EMPTY_LINT_REPORT) $(NONEMPTY_LINT_REPORT)
+
+docs: $(DOXYGEN_OUTPUT_DIR)
+	@ cd ./docs ; ln -sfn ../$(DOXYGEN_OUTPUT_DIR)/html doxygen
+
+$(DOXYGEN_OUTPUT_DIR): $(DOXYGEN_CONFIG_FILE) $(DOXYGEN_SOURCES)
+	$(DOXYGEN_COMMAND) $(DOXYGEN_CONFIG_FILE)
+
+$(EMPTY_LINT_REPORT): $(LINT_OUTPUTS) | $(BUILD_DIR)
+	@ cat $(LINT_OUTPUTS) > $@
+	@ if [ -s "$@" ]; then \
+		cat $@; \
+		mv $@ $(NONEMPTY_LINT_REPORT); \
+		echo "Found one or more lint errors."; \
+		exit 1; \
+	  fi; \
+	  $(RM) $(NONEMPTY_LINT_REPORT); \
+	  echo "No lint errors!";
+
+$(LINT_OUTPUTS): $(LINT_OUTPUT_DIR)/%.lint.txt : % $(LINT_SCRIPT) | $(LINT_OUTPUT_DIR)
+	@ mkdir -p $(dir $@)
+	@ python $(LINT_SCRIPT) $< 2>&1 \
+		| grep -v "^Done processing " \
+		| grep -v "^Total errors found: 0" \
+		> $@ \
+		|| true
+
+test: $(TEST_ALL_BIN) $(TEST_ALL_DYNLINK_BIN) $(TEST_BINS)
+
+tools: $(TOOL_BINS) $(TOOL_BIN_LINKS)
+
+examples: $(EXAMPLE_BINS)
+
+py$(PROJECT): py
+
+# $@ 表示当前目标，即下面的$@表示 $(PY$(PROJECT)_SO)
+# $< 表示第一个前置条件，即下面的表示 $(PY$(PROJECT)_SRC)
+# --shared 表示编译成动态库
+$(PY$(PROJECT)_SO): $(PY$(PROJECT)_SRC) $(PY$(PROJECT)_HXX) | $(DYNAMIC_NAME)
+	@ echo CXX/LD -o $@ $<
+	$(Q)$(CXX) --shared -o $@ $(PY$(PROJECT)_SRC) \
+	-o $A $(LINKFLAGS) -l$(LIBRARY_NAME) $(PYTHON_LDFLAGS) \
+	-Wl, -rpath, $(ORIGIN)/../../build/lib
+
+mat$(PROJECT): mat
+
+mat: $(MAT$(PROJECT)_SO)
+
+$(MAT$(PROJECT)_SO): $(MAT$(PROJECT)_SRC) $(STATIC_NAME)
+	@ if [ -z "$(MATLAB_DIR)" ]; then \
+		echo "MATLAB_DIR must be specified in $(CONFIG_FILE)" \
+			"to build mat$(PROJECT)."; \
+		exit 1; \
+	fi
+	@ echo MEX $<
+	$(Q)$(MATLAB_DIR)/bin/mex $(MAT$(PROJECT)_SRC) \
+			CXX="$(CXX)" \
+			CXXFLAGS="\$$CXXFLAGS $(MATLAB_CXXFLAGS)" \
+			CXXLIBS="\$$CXXLIBS $(STATIC_LINK_COMMAND) $(LDFLAGS)" -output $@
+	@ if [ -f "$(PROJECT)_.d" ]; then \
+		mv -f $(PROJECT)_.d $(BUILD_DIR)/${MAT$(PROJECT)_SO:.$(MAT_SO_EXT)=.d}; \
+	fi
+
+runtest: $(TEST_ALL_BIN)
+	$(TOOL_BUILD_DIR)/caffe
+	$(TEST_ALL_BIN) $(TEST_GPUID) --gtest_shuffle $(TEST_FILTER)
+
+pytest: py
+	cd python; python -m unittest discover -s caffe/test
+
+mattest: mat
+	cd matlab; $(MATLAB_DIR)/bin/matlab -nodisplay -r 'caffe.run_tests(), exit()'
+
+warn: $(EMPTY_WARN_REPORT)
+
+$(EMPTY_WARN_REPORT): $(ALL_WARNS) | $(BUILD_DIR)
+	@ cat $(ALL_WARNS) > $@
+	@ if [ -s "$@" ]; then \
+		cat $@; \
+		mv $@ $(NONEMPTY_WARN_REPORT); \
+		echo "Compiler produced one or more warnings."; \
+		exit 1; \
+	  fi; \
+	  $(RM) $(NONEMPTY_WARN_REPORT); \
+	  echo "No compiler warnings!";
+
+$(ALL_WARNS): %.o.$(WARNS_EXT) : %.o
+
+# Create a target ".linked" in this BUILD_DIR to tell Make that the "build" link
+# is currently correct, then delete the one in the OTHER_BUILD_DIR in case it
+# exists and $(DEBUG) is toggled later.
+$(BUILD_DIR)/.linked:
+	@ mkdir -p $(BUILD_DIR)
+	@ $(RM) $(OTHER_BUILD_DIR)/.linked
+	@ $(RM) -r $(BUILD_DIR_LINK)
+	@ ln -s $(BUILD_DIR) $(BUILD_DIR_LINK)
+	@ touch $@
+
+$(ALL_BUILD_DIRS): | $(BUILD_DIR_LINK)
+	@ mkdir -p $@
+
+# | 只有$(OBJS)不存在才更新编译$(LIB_BUILD_DIR)，单独$(LIB_BUILD_DIR)变化是不会更新编译$(OBJS)
+$(DYNAMIC_NAME): $(OBJS) | $(LIB_BUILD_DIR)
+	@ echo LD -o $@
+	$(Q)$(CXX) -shared -o $@ $(OBJS) $(VERSIONFLAGS) $(LINKFLAGS) $(LDFLAGS)
+	@ cd $(BUILD_DIR)/lib; rm -f $(DYNAMIC_NAME_SHORT);   ln -s $(DYNAMIC_VERSIONED_NAME_SHORT) $(DYNAMIC_NAME_SHORT)	
+
+# 使用ar打包静态库
+$(STATIC_NAME): $(OBJS) | $(LIB_BUILD_DIR)
+	@ echo AR -o $@
+	$(Q)ar rcs $@ $(OBJS)
+
+$(BUILD_DIR)/%.o: %.cpp $(PROTO_GEN_HEADER) | $(ALL_BUILD_DIRS)
+	@ echo CXX $<
+	$(Q)$(CXX) $< $(CXXFLAGS) -c -o $@ 2> $@.$(WARNS_EXT) \
+		|| (cat $@.$(WARNS_EXT); exit 1)
+	@ cat $@.$(WARNS_EXT)
+
+
+$(PROTO_BUILD_DIR)/%.pb.o: $(PROTO_BUILD_DIR)/%.pb.cc $(PROTO_GEN_HEADER) \
+		| $(PROTO_BUILD_DIR)
+	@ echo CXX $<
+	$(Q)$(CXX) $< $(CXXFLAGS) -c -o $@ 2> $@.$(WARNS_EXT) \
+		|| (cat $@.$(WARNS_EXT); exit 1)
+	@ cat $@.$(WARNS_EXT)
+
+# 使用NVCC编译cuda
+$(BUILD_DIR)/cuda/%.o: %.cu | $(ALL_BUILD_DIRS)
+	@ echo NVCC $<
+	$(Q)$(CUDA_DIR)/bin/nvcc $(NVCCFLAGS) $(CUDA_ARCH) -M $< -o ${@:.o=.d} \
+		-odir $(@D)
+	$(Q)$(CUDA_DIR)/bin/nvcc $(NVCCFLAGS) $(CUDA_ARCH) -c $< -o $@ 2> $@.$(WARNS_EXT) \
+		|| (cat $@.$(WARNS_EXT); exit 1)
+	@ cat $@.$(WARNS_EXT)
+
+$(TEST_ALL_BIN): $(TEST_MAIN_SRC) $(TEST_OBJS) $(GTEST_OBJ) \
+		| $(DYNAMIC_NAME) $(TEST_BIN_DIR)
+	@ echo CXX/LD -o $@ $<
+	$(Q)$(CXX) $(TEST_MAIN_SRC) $(TEST_OBJS) $(GTEST_OBJ) \
+		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
+
+$(TEST_CU_BINS): $(TEST_BIN_DIR)/%.testbin: $(TEST_CU_BUILD_DIR)/%.o \
+	$(GTEST_OBJ) | $(DYNAMIC_NAME) $(TEST_BIN_DIR)
+	@ echo LD $<
+	$(Q)$(CXX) $(TEST_MAIN_SRC) $< $(GTEST_OBJ) \
+		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
+
+$(TEST_CXX_BINS): $(TEST_BIN_DIR)/%.testbin: $(TEST_CXX_BUILD_DIR)/%.o \
+	$(GTEST_OBJ) | $(DYNAMIC_NAME) $(TEST_BIN_DIR)
+	@ echo LD $<
+	$(Q)$(CXX) $(TEST_MAIN_SRC) $< $(GTEST_OBJ) \
+		-o $@ $(LINKFLAGS) $(LDFLAGS) -l$(LIBRARY_NAME) -Wl,-rpath,$(ORIGIN)/../lib
+
+# Target for extension-less symlinks to tool binaries with extension '*.bin'.
+$(TOOL_BUILD_DIR)/%: $(TOOL_BUILD_DIR)/%.bin | $(TOOL_BUILD_DIR)
+	@ $(RM) $@
+	@ ln -s $(notdir $<) $@
+
+$(TOOL_BINS): %.bin : %.o | $(DYNAMIC_NAME)
+	@ echo CXX/LD -o $@
+	$(Q)$(CXX) $< -o $@ $(LINKFLAGS) -l$(LIBRARY_NAME) $(LDFLAGS) \
+		-Wl,-rpath,$(ORIGIN)/../lib
+
+$(EXAMPLE_BINS): %.bin : %.o | $(DYNAMIC_NAME)
+	@ echo CXX/LD -o $@
+	$(Q)$(CXX) $< -o $@ $(LINKFLAGS) -l$(LIBRARY_NAME) $(LDFLAGS) \
+		-Wl,-rpath,$(ORIGIN)/../../lib
+
+proto: $(PROTO_GEN_CC) $(PROTO_GEN_HEADER)
+
+$(PROTO_BUILD_DIR)/%.pb.cc $(PROTO_BUILD_DIR)/%.pb.h : \
+		$(PROTO_SRC_DIR)/%.proto | $(PROTO_BUILD_DIR)
+	@ echo PROTOC $<
+	$(Q)protoc --proto_path=$(PROTO_SRC_DIR) --cpp_out=$(PROTO_BUILD_DIR) $<
+
+$(PY_PROTO_BUILD_DIR)/%_pb2.py : $(PROTO_SRC_DIR)/%.proto \
+		$(PY_PROTO_INIT) | $(PY_PROTO_BUILD_DIR)
+	@ echo PROTOC \(python\) $<
+	$(Q)protoc --proto_path=src --python_out=python $<
+
+$(PY_PROTO_INIT): | $(PY_PROTO_BUILD_DIR)
+	touch $(PY_PROTO_INIT)
+
+clean:
+	@- $(RM) -rf $(ALL_BUILD_DIRS)
+	@- $(RM) -rf $(OTHER_BUILD_DIR)
+	@- $(RM) -rf $(BUILD_DIR_LINK)
+	@- $(RM) -rf $(DISTRIBUTE_DIR)
+	@- $(RM) $(PY$(PROJECT)_SO)
+	@- $(RM) $(MAT$(PROJECT)_SO)
+
+supercleanfiles:
+	$(eval SUPERCLEAN_FILES := $(strip \
+			$(foreach ext,$(SUPERCLEAN_EXTS), $(shell find . -name '*$(ext)' \
+			-not -path './data/*'))))
+
+supercleanlist: supercleanfiles
+	@ \
+	if [ -z "$(SUPERCLEAN_FILES)" ]; then \
+		echo "No generated files found."; \
+	else \
+		echo $(SUPERCLEAN_FILES) | tr ' ' '\n'; \
+	fi
+
+superclean: clean supercleanfiles
+	@ \
+	if [ -z "$(SUPERCLEAN_FILES)" ]; then \
+		echo "No generated files found."; \
+	else \
+		echo "Deleting the following generated files:"; \
+		echo $(SUPERCLEAN_FILES) | tr ' ' '\n'; \
+		$(RM) $(SUPERCLEAN_FILES); \
+	fi
+
+$(DIST_ALIASES): $(DISTRIBUTE_DIR)
+
+$(DISTRIBUTE_DIR): all py | $(DISTRIBUTE_SUBDIRS)
+	# add proto
+	cp -r src/caffe/proto $(DISTRIBUTE_DIR)/
+	# add include
+	cp -r include $(DISTRIBUTE_DIR)/
+	mkdir -p $(DISTRIBUTE_DIR)/include/caffe/proto
+	cp $(PROTO_GEN_HEADER_SRCS) $(DISTRIBUTE_DIR)/include/caffe/proto
+	# add tool and example binaries
+	cp $(TOOL_BINS) $(DISTRIBUTE_DIR)/bin
+	cp $(EXAMPLE_BINS) $(DISTRIBUTE_DIR)/bin
+	# add libraries
+	cp $(STATIC_NAME) $(DISTRIBUTE_DIR)/lib
+	install -m 644 $(DYNAMIC_NAME) $(DISTRIBUTE_DIR)/lib
+	cd $(DISTRIBUTE_DIR)/lib; rm -f $(DYNAMIC_NAME_SHORT);   ln -s $(DYNAMIC_VERSIONED_NAME_SHORT) $(DYNAMIC_NAME_SHORT)
+	# add python - it's not the standard way, indeed...
+	cp -r python $(DISTRIBUTE_DIR)/
+
+-include $(DEPS)
