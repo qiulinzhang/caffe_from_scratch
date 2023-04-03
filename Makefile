@@ -522,6 +522,8 @@ examples: $(EXAMPLE_BINS)
 
 py$(PROJECT): py
 
+py: $(PY$(PROJECT)_SO) $(PROTO_GEN_PY)
+
 # $@ 表示当前目标，即下面的$@表示 $(PY$(PROJECT)_SO)
 # $< 表示第一个前置条件，即下面的表示 $(PY$(PROJECT)_SRC)
 # --shared 表示编译成动态库
