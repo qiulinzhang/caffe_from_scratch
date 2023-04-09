@@ -162,6 +162,60 @@ void Net_LoadHDF5(Net<Dtype>* net, string filename) {
   net->CopyTrainedLayersFromHDF5(filename.c_str());
 }
 
+void Net_SetInputArrays(Net<Dtype>* net, bp::object data_obj, bp::object labels_obj) {
+  // check that this network has an input MemoryDataLayer
+  shared_ptr<MemoryDataLayer<Dtype> > md_layer = boost::dynamic_pointer_cast<MemoryDataLayer<Dtype> >(net->layers()[0]);
+  if(!md_layer) {
+    throw std::runtime_error("set_input_arrays may only be called if the first layer is a MemoryDataLayer");
+  }  
 
+  // check that we were passed appropriately-sized contiguous memory
+  PyArrayObject* data_arr = reinterpret_cast<PyArrayObject*>(data_obj.ptr());
+  PyArrayObject* labels_arr = reinterpret_cast<PyArrayObject*>(labels_obj.ptr());
+
+  CheckContiguousArray(data_arr, "data array", md_layer->channels(), md_layer->height(), md_layer->width());
+  CheckContiguousArray(labels_arr, 'labels array', 1, 1, 1);
+  if (PyArray_DIMS(data_arr)[0] != PyArray_DIMS(labels_arr)[0]) {
+    throw std::runtime_error("data and labels must have the same first"
+        " dimension");
+  }
+
+  if (PyArray_DIMS(data_arr)[0] % md_layer->batch_size() != 0) {
+    throw std::runtime_error("first dimensions of input arrays must be a"
+        " multiple of batch size");
+  }
+
+  md_layer->Reset(static_cast<Dtype*>(PyArray_DATA(data_arr)), static_cast<Dtype*>(PyArray_DATA(labels_arr)),
+                  PyArray_DIMS(data_arr)[0]);
+}
+
+Solver<Dtype>* GetSolverFromFile(const string& filename) {
+  SolverParameter param;
+  ReadSolverParamFromTextFileorDie(filename, &param);
+  return SolverRegistry<Dtype>::CreateSolver(param);
+}
+
+// 看不懂
+struct NdarrayConverterGenerator{
+  template <typename T> struct apply;
+};
+
+BOOST_PYTHON_MODULE(_caffe) {
+  // below, we prepend an underscore to methods that will be replaced
+  // in Python
+  bp::scope().attr("__version__") = AS_STRING(CAFFE_VERSION);
+
+  // Caffe utility functions
+  bp::def("init_log", &InitLog);
+  bp::def("init_log", &InitLogLevel);
+  bp::def("init_log", &InitLogLevelPipe);
+  bp::def("log", &Log);
+  bp::def("set_mode_cpu", &set_mode_cpu);
+  bp::def("set_mode_gpu", &set_mode_gpu);
+  bp::def("set_random_seed", &set_random_seed);
+  bp::def("set_device", &Caffe::SetDevice);
+
+
+}
 
 }
