@@ -110,4 +110,58 @@ void CheckContiguousArray(PyArrayObject* arr, string name, int channels, int hei
 
 }
 
+// Net constructor
+shared_ptr<Net<Dtype> > Net_Init(string network_file, int phase, const int level, 
+                                 const bp::object& stages, const bp::object& weights) {
+    CheckFile(network_file);
+
+    // Convert stages from list to vector
+    vector<string> stages_vector;
+    if(!stages.is_none()){
+      for(int i=0; i<len(stages); ++i) {
+        stages_vector.push_back(bp::extract<string>(stages[i]));
+      }
+    }
+
+    // Initialize Net
+    shared_ptr<Net<Dtype> > net(new Net<Dtype>(network_file, static_cast<Phase>(phase), level, &stages_vector));
+
+    // Load weights
+    if(!weights.is_none()) {
+      std::string weights_file_str = bp::extract<std::string>(weights);
+      CheckFile(weights_file_str);
+      net->CopyTrainedLayersFrom(weights_file_str);
+    }
+    return net;
+    }
+
+// Legacy Net construct-and-load convenience constructor
+shared_ptr<Net<Dtype> > Net_Init_Load(string param_file, string pretrained_param_file, int phase) {
+  LOG(WARNING) << "DEPRECATION WARNING - deprecated use of Python interface";
+  LOG(WARNING) << "Use this instead (with the named \"weights\" parameter):";
+  LOG(WARNING) << "Net('"<<param_file<<"', "<<phase<<", weights='"<<pretrained_param_file<<"')";
+  CheckFile(param_file);
+  CheckFile(pretrained_param_file);
+
+  shared_ptr<Net<Dtype> > net(new Net<Dtype>(param_file, static_cast<Phase>(phase)));
+  net->CopyTrainedLayersFrom(pretrained_param_file);
+  return net;
+}
+
+void Net_Save(const Net<Dtype>& net, string filename) {
+  NetParameter net_param;
+  net.ToProto(&net_param, false);
+  WriteProtoToBinary(net_param, filename.c_str());
+}
+
+void Net_SaveHDF5(const Net<Dtype>& net, string filename) {
+  net.ToHDF5(filename);
+}
+
+void Net_LoadHDF5(Net<Dtype>* net, string filename) {
+  net->CopyTrainedLayersFromHDF5(filename.c_str());
+}
+
+
+
 }
